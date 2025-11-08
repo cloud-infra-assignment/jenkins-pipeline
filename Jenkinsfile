@@ -33,31 +33,36 @@ pipeline {
             parallel {
                 stage('Unit Tests') {
                     steps {
-                        sh '''
-                            python3 -m venv venv
-                            . venv/bin/activate
-                            pip install -q --upgrade pip
-                            pip install -q -r requirements.txt
-                            pip install -q pytest
-                            python -m pytest tests.py -v --junitxml=test-results.xml
-                        '''
+                        sh """
+                            docker run --rm \\
+                                -v ${WORKSPACE}:/app \\
+                                -w /app \\
+                                ${DOCKER_IMAGE} \\
+                                sh -lc 'python -m pip install -q --no-cache-dir pytest && \\
+                                       python -m pytest tests.py -v --junitxml=test-results.xml'
+                        """
                     }
                     post {
                         always {
-                            junit 'test-results.xml' 
+                            junit allowEmptyResults: true, testResults: 'test-results.xml'
                         }
                     }
                 }
                 
                 stage('SAST - Security Scanning') {
                     steps {
-                        sh '''
-                            python3 -m venv venv
-                            . venv/bin/activate
-                            pip install -q bandit[toml]
-                            bandit -r app/ -f json -o bandit-report.json || true
-                            bandit -r app/ -ll || true
-                        '''
+                        sh """
+                            docker run --rm \\
+                                -v ${WORKSPACE}:/src \\
+                                -w /src \\
+                                ghcr.io/pycqa/bandit:latest \\
+                                -r app/ -f json -o bandit-report.json || true
+                            docker run --rm \\
+                                -v ${WORKSPACE}:/src \\
+                                -w /src \\
+                                ghcr.io/pycqa/bandit:latest \\
+                                -r app/ -ll || true
+                        """
                     }
                 }
                 
