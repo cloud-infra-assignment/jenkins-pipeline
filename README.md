@@ -19,17 +19,25 @@ Declarative pipeline with parallel security scanning and container validation.
 
 | Stage | Purpose | Tool |
 |-------|---------|------|
-| **Checkout** | Fetch source code | git |
-| **Unit Tests** | Run pytest suite | pytest |
-| **Security & Linting (Parallel)** | | |
-| - SAST Scanning | Scan code for vulnerabilities | Bandit |
-| - Secret Scanning | Detect hardcoded secrets & credentials | TruffleHog |
-| - Dockerfile Linting | Validate best practices | Hadolint |
 | **Build Docker Image** | Create container image | docker build |
-| **Container Validation (Parallel)** | | |
-| - Container Smoke Test | Verify app runs & health checks | docker run + HTTP test |
-| - Container Vulnerability Scan | Scan for CVEs | Trivy |
+| **Checks & Validation (Parallel)** | | |
+| ├─ Unit Tests | Run pytest suite | pytest |
+| ├─ SAST Scanning | Scan code for vulnerabilities | Bandit |
+| ├─ Secret Scanning | Detect hardcoded secrets & credentials | TruffleHog |
+| ├─ Dockerfile Linting | Validate best practices | Hadolint |
+| ├─ Container Smoke Test | Verify app runs & health checks | docker run + HTTP test |
+| └─ Container Vulnerability Scan | Scan for CVEs | Trivy |
 | **Push to Registry** | Push to GHCR (main branch only) | docker push |
+
+### Optimization Notes
+
+Due to the declarative pipeline requirement, optimization options are limited.
+Declarative pipelines do not support nested parallel stages. 
+
+Ideally, the Docker build could run in parallel with security and linting checks for further performance gains.
+
+Currently, this optimization provides modest savings when image layers are cached. 
+However, when base images are large or lower layers change, the build could compete with Unit Tests as the pipeline's longest stage, yielding significant time savings.
 
 ### Generated Artifacts (stored in Jenkins)
 
@@ -40,6 +48,15 @@ Declarative pipeline with parallel security scanning and container validation.
 - Docker images (pushed to GHCR on main branch):
   - `ghcr.io/{user}/microblog:{BUILD_NUMBER}` - Build number tag
   - `ghcr.io/{user}/microblog:{GIT_COMMIT_SHA}` - Immutable Git commit SHA tag
+
+
+## References:
+
+[Optimization related - GitHub issue](https://github.com/jenkinsci/pipeline-graph-view-plugin/issues/51)
+
+[Optimization related - StackOverflow](https://stackoverflow.com/questions/72986221/how-to-achive-nested-parallel-in-jenkins-declarative-pipeline)
+
+
 ## About Microblog
 
 This is an example application featured in the [Flask Mega-Tutorial](https://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-i-hello-world). See the tutorial for instructions on how to work with it.
