@@ -146,11 +146,14 @@ pipeline {
                         # Clone helm chart repository
                         git clone https://${GITHUB_CREDS_USR}:${GITHUB_CREDS_PSW}@github.com/cloud-infra-assignment/helm-microblog.git helm-chart-repo
                         cd helm-chart-repo
+                        # Ensure we are on main which contains microblog/values.yaml
+                        git fetch origin main
+                        git checkout -B main origin/main
                         
                         git config user.email "artyom.k.devops@posteo.net"
                         git config user.name "Artyom K"
-                        # Use chart values at microblog/values.yaml in helm-microblog repo
-                        FILE="microblog/values.yaml"
+                        # Use chart values; prefer microblog/values.yaml, else values.yaml
+                        FILE="microblog/values.yaml"; [ -f "values.yaml" ] && FILE="values.yaml"
                         # Update values.yaml with new image using YAML-aware tool (yq)
                         docker run --rm -e IMAGE_REPO="${IMAGE_REPO}" -v "${WORKSPACE}/helm-chart-repo":/workdir -w /workdir mikefarah/yq:4 \\
                           e --inplace --expression '.image.repository = strenv(IMAGE_REPO)' "\$FILE"
