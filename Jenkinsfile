@@ -11,6 +11,10 @@ pipeline {
         DOCKER_IMAGE = "${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}:${IMAGE_TAG}"
     }
     
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+    
     stages {
         stage('Checkout') {
             steps {
@@ -36,6 +40,9 @@ pipeline {
             }
         }
         
+        // Parallel security & linting stages for faster builds
+        stage('Security & Linting') {
+            parallel {
         stage('SAST - Security Scanning') {
             steps {
                 sh '''
@@ -46,20 +53,35 @@ pipeline {
                 '''
             }
         }
+                
+                stage('Secret Scanning') {
+                    steps {
+                        sh 'docker run --rm -v ${WORKSPACE}:/repo truffleHog/trufflehog:latest filesystem /repo --json > trufflehog-report.json || true'
+                    }
+                }
         
         stage('Dockerfile Linting') {
             steps {
                 sh 'docker run --rm -i hadolint/hadolint:latest-alpine < Dockerfile | tee hadolint-report.txt || true'
+                    }
+                }
             }
         }
         
         stage('Build Docker Image') {
             steps {
+                script {
+                    def gitCommitShort = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+                    env.GIT_COMMIT_SHORT = gitCommitShort
                 sh "docker build -t ${DOCKER_IMAGE} ."
-                sh "docker tag ${DOCKER_IMAGE} ${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}:latest"
+                    sh "docker tag ${DOCKER_IMAGE} ${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}:${gitCommitShort}"
+                }
             }
         }
         
+        // Parallel container testing and vulnerability scanning for faster builds
+        stage('Container Validation') {
+            parallel {
         stage('Container Smoke Test') {
             steps {
                 script {
@@ -89,6 +111,7 @@ pipeline {
             }
         }
         
+        // Non-blocking: Reports on CVEs but does not fail the build
         stage('Container Vulnerability Scan') {
             steps {
                 sh """
@@ -97,8 +120,10 @@ pipeline {
                         aquasec/trivy:latest image \\
                         --format json \\
                         --severity HIGH,CRITICAL \\
-                        ${DOCKER_IMAGE} || true
+                        ${DOCKER_IMAGE} > trivy-report.json || true
                 """
+                    }
+                }
             }
         }
         
@@ -111,7 +136,7 @@ pipeline {
                     sh """
                         echo ${GITHUB_CREDS_PSW} | docker login ${REGISTRY} -u ${GITHUB_CREDS_USR} --password-stdin
                         docker push ${DOCKER_IMAGE}
-                        docker push ${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}:latest
+                        docker push ${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}:${GIT_COMMIT_SHORT}
                     """
                 }
             }
@@ -122,7 +147,7 @@ pipeline {
         always {
             script {
                 try {
-                    archiveArtifacts artifacts: 'hadolint-report.txt,test-results.xml,bandit-report.json,trivy-report.json', 
+                    archiveArtifacts artifacts: 'hadolint-report.txt,test-results.xml,bandit-report.json,trufflehog-report.json,trivy-report.json', 
                         allowEmptyArchive: true
                 } catch (Exception e) {
                     echo "Failed to archive artifacts: ${e.message}"
