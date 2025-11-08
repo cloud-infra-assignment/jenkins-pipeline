@@ -149,8 +149,8 @@ pipeline {
                         
                         git config user.email "artyom.k.devops@posteo.net"
                         git config user.name "Artyom K"
-                        # Use root values.yaml in helm-microblog repo
-                        FILE="values.yaml"
+                        # Use chart values at microblog/values.yaml in helm-microblog repo
+                        FILE="microblog/values.yaml"
                         # Update values.yaml with new image using YAML-aware tool (yq)
                         docker run --rm -e IMAGE_REPO="${IMAGE_REPO}" -v "${WORKSPACE}/helm-chart-repo":/workdir -w /workdir mikefarah/yq:4 \\
                           e --inplace --expression '.image.repository = strenv(IMAGE_REPO)' "\$FILE"
