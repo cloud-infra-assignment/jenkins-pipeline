@@ -1,5 +1,71 @@
-# Welcome to Microblog!
+# Microblog - Jenkins CI/CD Pipeline
 
-This is an example application featured in my [Flask Mega-Tutorial](https://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-i-hello-world). See the tutorial for instructions on how to work with it.
+Flask application with a Jenkins CI/CD pipeline for containerized deployment.
+
+## Git Strategy
+
+This repository follows GitHub Flow with the following principles:
+
+- `main` branch reflects the deployed production version
+- All changes require pull requests before merging to `main`
+- Container images only push to the registry on `main` branch
+- Each merge to `main` is automatically deployable
+
+## Jenkins Pipeline
+
+Declarative pipeline with parallel security scanning and container validation.
+
+### Pipeline Stages
+
+| Stage | Purpose | Tool |
+|-------|---------|------|
+| **Build Docker Image** | Create container image | docker build |
+| **Checks & Validation (Parallel)** | | |
+| ├─ Unit Tests | Run pytest suite | pytest |
+| ├─ SAST Scanning | Scan code for vulnerabilities | Bandit |
+| ├─ Secret Scanning | Detect hardcoded secrets & credentials | TruffleHog |
+| ├─ Dockerfile Linting | Validate best practices | Hadolint |
+| ├─ Container Smoke Test | Verify app runs & health checks | docker run + HTTP test |
+| └─ Container Vulnerability Scan | Scan for CVEs | Trivy |
+| **Push to Registry** | Push to GHCR (main branch only) | docker push |
+
+### Optimization Notes
+
+Due to the declarative pipeline requirement, optimization options are limited.
+Declarative pipelines do not support nested parallel stages. 
+
+Ideally, the Docker build could run in parallel with security and linting checks for further performance gains.
+
+Currently, this optimization provides modest savings when image layers are cached. 
+However, when base images are large or lower layers change, the build could compete with Unit Tests as the pipeline's longest stage, yielding significant time savings.
+
+### Generated Artifacts (stored in Jenkins)
+
+- `test-results.xml` - JUnit test results
+- `bandit-report.json` - SAST security findings
+- `trufflehog-report.json` - Secret scanning results
+- `hadolint-report.txt` - Dockerfile lint issues
+- Docker images (pushed to GHCR on main branch):
+  - `ghcr.io/{user}/microblog:{BUILD_NUMBER}` - Build number tag
+  - `ghcr.io/{user}/microblog:{GIT_COMMIT_SHA}` - Immutable Git commit SHA tag
+
+
+## References:
+
+[Optimization related - GitHub issue](https://github.com/jenkinsci/pipeline-graph-view-plugin/issues/51)
+
+[Optimization related - StackOverflow](https://stackoverflow.com/questions/72986221/how-to-achive-nested-parallel-in-jenkins-declarative-pipeline)
+
+
+## About Microblog
+
+This is an example application featured in the [Flask Mega-Tutorial](https://blog.miguelgrinberg.com/post/the-flask-mega-tutorial-part-i-hello-world). See the tutorial for instructions on how to work with it.
 
 The version of the application featured in this repository corresponds to the 2024 edition of the Flask Mega-Tutorial. You can find the 2018 and 2021 versions of the code [here](https://github.com/miguelgrinberg/microblog-2018). And if for any strange reason you are interested in the original code, dating back to 2012, that is [here](https://github.com/miguelgrinberg/microblog-2012).
+## Dependencies
+
+The application requires:
+- PostgreSQL database
+- Redis cache
+
+
