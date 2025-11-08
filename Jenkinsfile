@@ -63,7 +63,7 @@ pipeline {
                 
                 stage('Secret Scanning') {
                     steps {
-                        sh 'docker run --rm -v ${WORKSPACE}:/repo truffleHog/trufflehog:latest filesystem /repo --json > trufflehog-report.json || true'
+                        sh 'docker run --rm -v ${WORKSPACE}:/repo trufflesecurity/trufflehog:latest filesystem /repo --json > trufflehog-report.json || true'
                     }
                 }
                 
@@ -106,11 +106,14 @@ pipeline {
                 stage('Container Vulnerability Scan') {
                     steps {
                         sh """
+                            mkdir -p "${WORKSPACE}/.trivy"
                             docker run --rm \\
-                                -e DOCKER_HOST=tcp://172.17.0.1:2375 \\
+                                -v /var/run/docker.sock:/var/run/docker.sock \\
+                                -v "${WORKSPACE}/.trivy:/root/.cache/" \\
                                 aquasec/trivy:latest image \\
                                 --format json \\
                                 --severity HIGH,CRITICAL \\
+                                --no-progress \\
                                 ${DOCKER_IMAGE} > trivy-report.json || true
                         """
                     }
