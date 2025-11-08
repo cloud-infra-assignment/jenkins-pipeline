@@ -8,7 +8,8 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         REGISTRY = 'ghcr.io'
         GITHUB_CREDS = credentials('github-token')
-        DOCKER_IMAGE = "${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}:${IMAGE_TAG}"
+        IMAGE_REPO = "${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}"
+        DOCKER_IMAGE = "${IMAGE_REPO}:${IMAGE_TAG}"
     }
     
     options {
@@ -22,7 +23,7 @@ pipeline {
                     def gitCommitShort = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
                     env.GIT_COMMIT_SHORT = gitCommitShort
                     sh "docker build -t ${DOCKER_IMAGE} ."
-                    sh "docker tag ${DOCKER_IMAGE} ${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}:${gitCommitShort}"
+                    sh "docker tag ${DOCKER_IMAGE} ${IMAGE_REPO}:${gitCommitShort}"
                 }
             }
         }
@@ -62,7 +63,7 @@ pipeline {
                 
                 stage('Secret Scanning') {
                     steps {
-                        sh 'docker run --rm -v ${WORKSPACE}:/repo truffleHog/trufflehog:latest filesystem /repo --json > trufflehog-report.json || true'
+                        sh 'docker run --rm -v ${WORKSPACE}:/repo trufflesecurity/trufflehog:latest filesystem /repo --json > trufflehog-report.json || true'
                     }
                 }
                 
@@ -105,11 +106,14 @@ pipeline {
                 stage('Container Vulnerability Scan') {
                     steps {
                         sh """
+                            mkdir -p "${WORKSPACE}/.trivy"
                             docker run --rm \\
-                                -e DOCKER_HOST=tcp://172.17.0.1:2375 \\
+                                -v /var/run/docker.sock:/var/run/docker.sock \\
+                                -v "${WORKSPACE}/.trivy:/root/.cache/" \\
                                 aquasec/trivy:latest image \\
                                 --format json \\
                                 --severity HIGH,CRITICAL \\
+                                --no-progress \\
                                 ${DOCKER_IMAGE} > trivy-report.json || true
                         """
                     }
@@ -126,7 +130,7 @@ pipeline {
                     sh """
                         echo ${GITHUB_CREDS_PSW} | docker login ${REGISTRY} -u ${GITHUB_CREDS_USR} --password-stdin
                         docker push ${DOCKER_IMAGE}
-                        docker push ${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}:${GIT_COMMIT_SHORT}
+                        docker push ${IMAGE_REPO}:${GIT_COMMIT_SHORT}
                     """
                 }
             }
@@ -146,9 +150,11 @@ pipeline {
                         git config user.email "artyom.k.devops@posteo.net"
                         git config user.name "Artyom K"
                         
-                        # Update values.yaml with new image
-                        sed -i "s|tag: \".*\"|tag: \"${IMAGE_TAG}\"|" microblog/values.yaml
-                        sed -i "s|repository: ghcr.io.*|repository: ${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}|" microblog/values.yaml
+                        # Update values.yaml with new image using YAML-aware tool (yq)
+                        docker run --rm -v "$PWD":/workdir -w /workdir mikefarah/yq:4 \\
+                          yq -i '.image.repository = env(IMAGE_REPO)' microblog/values.yaml
+                        docker run --rm -v "$PWD":/workdir -w /workdir mikefarah/yq:4 \\
+                          yq -i '.image.tag = env(IMAGE_TAG)' microblog/values.yaml
                         
                         # Commit and push
                         git add microblog/values.yaml
