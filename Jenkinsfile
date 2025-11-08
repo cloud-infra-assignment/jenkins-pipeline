@@ -33,31 +33,36 @@ pipeline {
             parallel {
                 stage('Unit Tests') {
                     steps {
-                        sh '''
-                            python3 -m venv venv
-                            . venv/bin/activate
-                            pip install -q --upgrade pip
-                            pip install -q -r requirements.txt
-                            pip install -q pytest
-                            python -m pytest tests.py -v --junitxml=test-results.xml
-                        '''
+                        sh """
+                            docker run --rm \\
+                                -v ${WORKSPACE}:/app \\
+                                -w /app \\
+                                ${DOCKER_IMAGE} \\
+                                sh -lc 'python -m pip install -q --no-cache-dir pytest && \\
+                                       python -m pytest tests.py -v --junitxml=test-results.xml'
+                        """
                     }
                     post {
                         always {
-                            junit 'test-results.xml' 
+                            junit allowEmptyResults: true, testResults: 'test-results.xml'
                         }
                     }
                 }
                 
                 stage('SAST - Security Scanning') {
                     steps {
-                        sh '''
-                            python3 -m venv venv
-                            . venv/bin/activate
-                            pip install -q bandit[toml]
-                            bandit -r app/ -f json -o bandit-report.json || true
-                            bandit -r app/ -ll || true
-                        '''
+                        sh """
+                            docker run --rm \\
+                                -v ${WORKSPACE}:/src \\
+                                -w /src \\
+                                ghcr.io/pycqa/bandit:latest \\
+                                -r app/ -f json -o bandit-report.json || true
+                            docker run --rm \\
+                                -v ${WORKSPACE}:/src \\
+                                -w /src \\
+                                ghcr.io/pycqa/bandit:latest \\
+                                -r app/ -ll || true
+                        """
                     }
                 }
                 
@@ -146,11 +151,14 @@ pipeline {
                         # Clone helm chart repository
                         git clone https://${GITHUB_CREDS_USR}:${GITHUB_CREDS_PSW}@github.com/cloud-infra-assignment/helm-microblog.git helm-chart-repo
                         cd helm-chart-repo
+                        # Ensure we are on main which contains microblog/values.yaml
+                        git fetch origin main
+                        git checkout -B main origin/main
                         
                         git config user.email "artyom.k.devops@posteo.net"
                         git config user.name "Artyom K"
-                        # Use chart values at microblog/values.yaml in helm-microblog repo
-                        FILE="microblog/values.yaml"
+                        # Use chart values; prefer microblog/values.yaml, else values.yaml
+                        FILE="microblog/values.yaml"; [ -f "values.yaml" ] && FILE="values.yaml"
                         # Update values.yaml with new image using YAML-aware tool (yq)
                         docker run --rm -e IMAGE_REPO="${IMAGE_REPO}" -v "${WORKSPACE}/helm-chart-repo":/workdir -w /workdir mikefarah/yq:4 \\
                           e --inplace --expression '.image.repository = strenv(IMAGE_REPO)' "\$FILE"
