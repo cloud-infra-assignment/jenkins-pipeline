@@ -131,6 +131,33 @@ pipeline {
                 }
             }
         }
+        
+        stage('Update Helm Chart Repository') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    sh """
+                        # Clone helm chart repository
+                        git clone https://${GITHUB_CREDS_USR}:${GITHUB_CREDS_PSW}@github.com/cloud-infra-assignment/helm-microblog.git helm-chart-repo
+                        cd helm-chart-repo
+                        
+                        git config user.email "artyom.k.devops@posteo.net"
+                        git config user.name "Artyom K"
+                        
+                        # Update values.yaml with new image
+                        sed -i "s|tag: \".*\"|tag: \"${IMAGE_TAG}\"|" microblog/values.yaml
+                        sed -i "s|repository: ghcr.io.*|repository: ${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}|" microblog/values.yaml
+                        
+                        # Commit and push
+                        git add microblog/values.yaml
+                        git commit -m "Update image to ${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}:${IMAGE_TAG}" || true
+                        git push origin main
+                    """
+                }
+            }
+        }
     }
     
     post {
