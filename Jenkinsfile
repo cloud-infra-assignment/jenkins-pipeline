@@ -152,9 +152,9 @@ pipeline {
                         
                         # Update values.yaml with new image using YAML-aware tool (yq)
                         docker run --rm -e IMAGE_REPO="${IMAGE_REPO}" -v "${WORKSPACE}/helm-chart-repo":/workdir -w /workdir mikefarah/yq:4 \\
-                          sh -c 'yq -i ".image.repository = env(IMAGE_REPO)" microblog/values.yaml'
+                          e -i '.image.repository = strenv(IMAGE_REPO)' microblog/values.yaml
                         docker run --rm -e IMAGE_TAG="${IMAGE_TAG}" -v "${WORKSPACE}/helm-chart-repo":/workdir -w /workdir mikefarah/yq:4 \\
-                          sh -c 'yq -i ".image.tag = env(IMAGE_TAG)" microblog/values.yaml'
+                          e -i '.image.tag = strenv(IMAGE_TAG)' microblog/values.yaml
                         
                         # Commit and push
                         git add microblog/values.yaml
