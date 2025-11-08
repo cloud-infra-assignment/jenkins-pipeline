@@ -153,12 +153,12 @@ pipeline {
                         FILE="values.yaml"
                         # Update values.yaml with new image using YAML-aware tool (yq)
                         docker run --rm -e IMAGE_REPO="${IMAGE_REPO}" -v "${WORKSPACE}/helm-chart-repo":/workdir -w /workdir mikefarah/yq:4 \\
-                          e --inplace --expression '.image.repository = strenv(IMAGE_REPO)' "${FILE}"
+                          e --inplace --expression '.image.repository = strenv(IMAGE_REPO)' "\$FILE"
                         docker run --rm -e IMAGE_TAG="${IMAGE_TAG}" -v "${WORKSPACE}/helm-chart-repo":/workdir -w /workdir mikefarah/yq:4 \\
-                          e --inplace --expression '.image.tag = strenv(IMAGE_TAG)' "${FILE}"
+                          e --inplace --expression '.image.tag = strenv(IMAGE_TAG)' "\$FILE"
                         
                         # Commit and push
-                        git add "${FILE}"
+                        git add "\$FILE"
                         git commit -m "Update image to ${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}:${IMAGE_TAG}" || true
                         git push origin main
                     """
