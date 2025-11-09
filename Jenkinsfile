@@ -38,8 +38,12 @@ pipeline {
                                 -v ${WORKSPACE}:/app \\
                                 -w /app \\
                                 ${DOCKER_IMAGE} \\
-                                sh -lc 'python -m pip install -q --no-cache-dir pytest && \\
-                                       python -m pytest tests.py -v --junitxml=test-results.xml'
+                                sh -lc "python -m pip install -q --no-cache-dir pytest && \\
+                                       set +e; \\
+                                       python -m pytest -v --junitxml=test-results.xml; \\
+                                       exit_code=\\$?; \\
+                                       set -e; \\
+                                       exit \\$exit_code"
                         """
                     }
                     post {
@@ -55,12 +59,12 @@ pipeline {
                             docker run --rm \\
                                 -v ${WORKSPACE}:/src \\
                                 -w /src \\
-                                ghcr.io/pycqa/bandit:latest \\
+                                docker.io/pycqa/bandit:latest \\
                                 -r app/ -f json -o bandit-report.json || true
                             docker run --rm \\
                                 -v ${WORKSPACE}:/src \\
                                 -w /src \\
-                                ghcr.io/pycqa/bandit:latest \\
+                                docker.io/pycqa/bandit:latest \\
                                 -r app/ -ll || true
                         """
                     }
@@ -84,6 +88,9 @@ pipeline {
                             def testContainer = "${APP_NAME}-test-${BUILD_NUMBER}"
                             try {
                                 sh """
+                                    # Ensure no leftover container blocks the name
+                                    docker rm -f ${testContainer} || true
+                                    
                                     docker run -d --name ${testContainer} \\
                                         -e SECRET_KEY=test -e DATABASE_URL=sqlite:///test.db ${DOCKER_IMAGE}
                                     
