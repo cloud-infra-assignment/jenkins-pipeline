@@ -141,11 +141,11 @@ pipeline {
             }
             steps {
                 script {
-                    sh """
-                        echo ${GITHUB_CREDS_PSW} | docker login ${REGISTRY} -u ${GITHUB_CREDS_USR} --password-stdin
-                        docker push ${DOCKER_IMAGE}
-                        docker push ${IMAGE_REPO}:${GIT_COMMIT_SHORT}
-                    """
+                    sh '''
+                        echo "$GITHUB_CREDS_PSW" | docker login "$REGISTRY" -u "$GITHUB_CREDS_USR" --password-stdin
+                        docker push "$DOCKER_IMAGE"
+                        docker push "$IMAGE_REPO:$GIT_COMMIT_SHORT"
+                    '''
                 }
             }
         }
@@ -156,29 +156,44 @@ pipeline {
             }
             steps {
                 script {
-                    sh """
+                    sh '''
+                        set -euo pipefail
                         # Clone helm chart repository
-                        git clone https://${GITHUB_CREDS_USR}:${GITHUB_CREDS_PSW}@github.com/cloud-infra-assignment/helm-microblog.git helm-chart-repo
+                        git clone "https://$GITHUB_CREDS_USR:$GITHUB_CREDS_PSW@github.com/cloud-infra-assignment/helm-microblog.git" helm-chart-repo
                         cd helm-chart-repo
-                        # Ensure we are on main which contains microblog/values.yaml
+                        # Ensure we are on main
                         git fetch origin main
                         git checkout -B main origin/main
                         
                         git config user.email "artyom.k.devops@posteo.net"
                         git config user.name "Artyom K"
-                        # Use chart values; prefer microblog/values.yaml, else values.yaml
-                        FILE="microblog/values.yaml"; [ -f "values.yaml" ] && FILE="values.yaml"
-                        # Update values.yaml with new image using YAML-aware tool (yq)
-                        docker run --rm -e IMAGE_REPO="${IMAGE_REPO}" -v "${WORKSPACE}/helm-chart-repo":/workdir -w /workdir mikefarah/yq:4 \\
-                          e --inplace --expression '.image.repository = strenv(IMAGE_REPO)' "\$FILE"
-                        docker run --rm -e IMAGE_TAG="${IMAGE_TAG}" -v "${WORKSPACE}/helm-chart-repo":/workdir -w /workdir mikefarah/yq:4 \\
-                          e --inplace --expression '.image.tag = strenv(IMAGE_TAG)' "\$FILE"
+                        
+                        # Find values.yaml intelligently
+                        FILE=""
+                        if [ -f "microblog/values.yaml" ]; then
+                          FILE="microblog/values.yaml"
+                        elif [ -f "values.yaml" ]; then
+                          FILE="values.yaml"
+                        else
+                          # look for common helm chart layouts
+                          FILE="$(git ls-files | grep -E '(^|/)(charts|helm)/[^/]+/values\\.yaml$' | head -n1 || true)"
+                        fi
+                        if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
+                          echo "ERROR: Could not find values.yaml in repo. Checked: microblog/values.yaml, values.yaml, charts/*/values.yaml, helm/*/values.yaml"
+                          exit 1
+                        fi
+                        
+                        # Update values.yaml with new image using yq
+                        docker run --rm -e IMAGE_REPO="$IMAGE_REPO" -v "$PWD":/workdir -w /workdir mikefarah/yq:4 \\
+                          e --inplace --expression '.image.repository = strenv(IMAGE_REPO)' "$FILE"
+                        docker run --rm -e IMAGE_TAG="$IMAGE_TAG" -v "$PWD":/workdir -w /workdir mikefarah/yq:4 \\
+                          e --inplace --expression '.image.tag = strenv(IMAGE_TAG)' "$FILE"
                         
                         # Commit and push
-                        git add "\$FILE"
-                        git commit -m "Update image to ${REGISTRY}/${GITHUB_CREDS_USR}/${APP_NAME}:${IMAGE_TAG}" || true
+                        git add "$FILE"
+                        git commit -m "Update image to $REGISTRY/$GITHUB_CREDS_USR/$APP_NAME:$IMAGE_TAG" || true
                         git push origin main
-                    """
+                    '''
                 }
             }
         }
