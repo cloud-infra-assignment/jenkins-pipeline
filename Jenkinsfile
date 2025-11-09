@@ -34,11 +34,12 @@ pipeline {
                 stage('Unit Tests') {
                     steps {
                         sh '''
-                            python3 -m venv venv
-                            . venv/bin/activate
-                            pip install -q --upgrade pip
-                            pip install -q -r requirements.txt
-                            pip install -q pytest
+                            venv_dir=".venv-tests"
+                            python3 -m venv "$venv_dir"
+                            . "$venv_dir/bin/activate"
+                            python -m pip install -q --upgrade pip
+                            python -m pip install -q -r requirements.txt
+                            python -m pip install -q pytest
                             set +e
                             python -m pytest -v --junitxml=test-results.xml
                             exit_code=$?
@@ -56,10 +57,11 @@ pipeline {
                 stage('SAST - Security Scanning') {
                     steps {
                         sh '''
-                            python3 -m venv venv
-                            . venv/bin/activate
-                            pip install -q --upgrade pip
-                            pip install -q "bandit[toml]"
+                            venv_dir=".venv-sast"
+                            python3 -m venv "$venv_dir"
+                            . "$venv_dir/bin/activate"
+                            python -m pip install -q --upgrade pip
+                            python -m pip install -q "bandit[toml]"
                             bandit -r app/ -f json -o bandit-report.json || true
                             bandit -r app/ -ll || true
                         '''
