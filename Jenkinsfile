@@ -157,7 +157,7 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        set -euo pipefail
+                        set -eu
                         # Clone helm chart repository
                         git clone "https://$GITHUB_CREDS_USR:$GITHUB_CREDS_PSW@github.com/cloud-infra-assignment/helm-microblog.git" helm-chart-repo
                         cd helm-chart-repo
@@ -183,11 +183,11 @@ pipeline {
                           exit 1
                         fi
                         
-                        # Update values.yaml with new image using yq
-                        docker run --rm -e IMAGE_REPO="$IMAGE_REPO" -v "$PWD":/workdir -w /workdir mikefarah/yq:4 \\
-                          e --inplace --expression '.image.repository = strenv(IMAGE_REPO)' "$FILE"
-                        docker run --rm -e IMAGE_TAG="$IMAGE_TAG" -v "$PWD":/workdir -w /workdir mikefarah/yq:4 \\
-                          e --inplace --expression '.image.tag = strenv(IMAGE_TAG)' "$FILE"
+                        # Update values.yaml with new image using sed (portable GNU sed)
+                        # Update tag
+                        sed -i "s|^[[:space:]]*tag:.*|tag: \\\"$IMAGE_TAG\\\"|" "$FILE"
+                        # Update repository
+                        sed -i "s|^[[:space:]]*repository:.*|repository: $REGISTRY/$GITHUB_CREDS_USR/$APP_NAME|" "$FILE"
                         
                         # Commit and push
                         git add "$FILE"
