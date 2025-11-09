@@ -184,10 +184,11 @@ pipeline {
                         fi
                         
                         # Update values.yaml with new image using sed (portable GNU sed)
+                        # Preserve indentation: capture leading spaces and reuse them
                         # Update tag
-                        sed -i "s|^[[:space:]]*tag:.*|tag: \\\"$IMAGE_TAG\\\"|" "$FILE"
+                        sed -i "s|^\\([[:space:]]*\\)tag:.*|\\1tag: \\\"$IMAGE_TAG\\\"|" "$FILE"
                         # Update repository
-                        sed -i "s|^[[:space:]]*repository:.*|repository: $REGISTRY/$GITHUB_CREDS_USR/$APP_NAME|" "$FILE"
+                        sed -i "s|^\\([[:space:]]*\\)repository:.*|\\1repository: $REGISTRY/$GITHUB_CREDS_USR/$APP_NAME|" "$FILE"
                         
                         # Commit and push
                         git add "$FILE"
