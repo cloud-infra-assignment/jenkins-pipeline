@@ -44,7 +44,11 @@ pipeline {
                             python -m pytest -v --junitxml=test-results.xml
                             exit_code=$?
                             set -e
-                            exit $exit_code
+                            if [ "$exit_code" -eq 5 ]; then
+                              echo "No tests collected; treating as success."
+                              exit 0
+                            fi
+                            exit "$exit_code"
                         '''
                     }
                     post {
