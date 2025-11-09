@@ -33,14 +33,19 @@ pipeline {
             parallel {
                 stage('Unit Tests') {
                     steps {
-                        sh """
-                            docker run --rm \\
-                                -v ${WORKSPACE}:/app \\
-                                -w /app \\
-                                ${DOCKER_IMAGE} \\
-                                sh -lc 'python -m pip install -q --no-cache-dir pytest && \\
-                                       python -m pytest tests.py -v --junitxml=test-results.xml'
-                        """
+                        sh '''
+                            venv_dir=".venv-tests"
+                            python3 -m venv "$venv_dir"
+                            . "$venv_dir/bin/activate"
+                            python -m pip install -q --upgrade pip
+                            python -m pip install -q -r requirements.txt
+                            python -m pip install -q pytest
+                            set +e
+                            python -m pytest -v --junitxml=test-results.xml
+                            exit_code=$?
+                            set -e
+                            exit $exit_code
+                        '''
                     }
                     post {
                         always {
@@ -51,18 +56,15 @@ pipeline {
                 
                 stage('SAST - Security Scanning') {
                     steps {
-                        sh """
-                            docker run --rm \\
-                                -v ${WORKSPACE}:/src \\
-                                -w /src \\
-                                ghcr.io/pycqa/bandit:latest \\
-                                -r app/ -f json -o bandit-report.json || true
-                            docker run --rm \\
-                                -v ${WORKSPACE}:/src \\
-                                -w /src \\
-                                ghcr.io/pycqa/bandit:latest \\
-                                -r app/ -ll || true
-                        """
+                        sh '''
+                            venv_dir=".venv-sast"
+                            python3 -m venv "$venv_dir"
+                            . "$venv_dir/bin/activate"
+                            python -m pip install -q --upgrade pip
+                            python -m pip install -q "bandit[toml]"
+                            bandit -r app/ -f json -o bandit-report.json || true
+                            bandit -r app/ -ll || true
+                        '''
                     }
                 }
                 
@@ -84,6 +86,9 @@ pipeline {
                             def testContainer = "${APP_NAME}-test-${BUILD_NUMBER}"
                             try {
                                 sh """
+                                    # Ensure no leftover container blocks the name
+                                    docker rm -f ${testContainer} || true
+                                    
                                     docker run -d --name ${testContainer} \\
                                         -e SECRET_KEY=test -e DATABASE_URL=sqlite:///test.db ${DOCKER_IMAGE}
                                     
