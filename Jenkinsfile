@@ -33,18 +33,18 @@ pipeline {
             parallel {
                 stage('Unit Tests') {
                     steps {
-                        sh """
-                            docker run --rm \\
-                                -v ${WORKSPACE}:/app \\
-                                -w /app \\
-                                ${DOCKER_IMAGE} \\
-                                sh -lc "python -m pip install -q --no-cache-dir pytest && \\
-                                       set +e; \\
-                                       python -m pytest -v --junitxml=test-results.xml; \\
-                                       exit_code=\\$?; \\
-                                       set -e; \\
-                                       exit \\$exit_code"
-                        """
+                        sh '''
+                            python3 -m venv venv
+                            . venv/bin/activate
+                            pip install -q --upgrade pip
+                            pip install -q -r requirements.txt
+                            pip install -q pytest
+                            set +e
+                            python -m pytest -v --junitxml=test-results.xml
+                            exit_code=$?
+                            set -e
+                            exit $exit_code
+                        '''
                     }
                     post {
                         always {
@@ -55,18 +55,14 @@ pipeline {
                 
                 stage('SAST - Security Scanning') {
                     steps {
-                        sh """
-                            docker run --rm \\
-                                -v ${WORKSPACE}:/src \\
-                                -w /src \\
-                                docker.io/pycqa/bandit:latest \\
-                                -r app/ -f json -o bandit-report.json || true
-                            docker run --rm \\
-                                -v ${WORKSPACE}:/src \\
-                                -w /src \\
-                                docker.io/pycqa/bandit:latest \\
-                                -r app/ -ll || true
-                        """
+                        sh '''
+                            python3 -m venv venv
+                            . venv/bin/activate
+                            pip install -q --upgrade pip
+                            pip install -q "bandit[toml]"
+                            bandit -r app/ -f json -o bandit-report.json || true
+                            bandit -r app/ -ll || true
+                        '''
                     }
                 }
                 
